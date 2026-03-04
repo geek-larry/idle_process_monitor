@@ -1,11 +1,13 @@
 import psutil
 import re
 from src.utils.logger import logger
+from src.config.user_config import user_config
 
 class MatlabMonitor:
     def __init__(self):
         self.name = "matlab"
         self.process_name = "MATLAB.exe"
+        self.enabled = user_config.get("matlab.monitor.enabled", False)  # 默认为关闭
 
     def is_matlab_running(self):
         """检查Matlab是否正在运行"""
@@ -24,61 +26,23 @@ class MatlabMonitor:
 
     def check_matlab_activity(self):
         """检查Matlab是否正在执行任务"""
+        # 检查是否开启Matlab扩展监控
+        if not self.enabled:
+            logger.debug("Matlab extension monitor is disabled")
+            return False
+            
         if not self.is_matlab_running():
             return False
 
-        # 方法1：检查Matlab进程的CPU和内存使用情况
-        cpu_usage = self._get_process_cpu_usage(self.process_name)
-        memory_usage = self._get_process_memory_usage(self.process_name)
-
-        # 方法2：尝试通过命令行执行Matlab命令检查状态
+        # 只使用命令行的监控逻辑
         is_active = self._check_matlab_status_via_command()
 
-        # 综合判断：如果CPU使用率较高，或内存使用较大，或通过命令检查到活动，则认为Matlab处于活跃状态
-        if cpu_usage > 10 or memory_usage > 500 or is_active:
-            logger.debug(f"Matlab is active: CPU={cpu_usage:.2f}%, Memory={memory_usage:.2f}MB")
+        if is_active:
+            logger.debug("Matlab is active via command line check")
             return True
         else:
-            logger.debug(f"Matlab is idle: CPU={cpu_usage:.2f}%, Memory={memory_usage:.2f}MB")
+            logger.debug("Matlab is idle via command line check")
             return False
-
-    def _get_process_cpu_usage(self, process_name):
-        """获取进程的CPU使用率"""
-        try:
-            # 使用psutil获取进程的CPU使用率
-            cpu_values = []
-            for proc in psutil.process_iter(['name']):
-                try:
-                    if proc.info['name'] == process_name:
-                        # 获取CPU使用率，使用较短的间隔以提高性能
-                        cpu_percent = proc.cpu_percent(interval=0.05)
-                        cpu_values.append(cpu_percent)
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                    pass
-            if cpu_values:
-                return sum(cpu_values) / len(cpu_values)
-        except Exception as e:
-            logger.error(f"Error getting CPU usage for {process_name}: {e}")
-        return 0
-
-    def _get_process_memory_usage(self, process_name):
-        """获取进程的内存使用量（MB）"""
-        try:
-            # 使用psutil获取进程的内存使用量
-            memory_values = []
-            for proc in psutil.process_iter(['name']):
-                try:
-                    if proc.info['name'] == process_name:
-                        # 获取内存使用情况，转换为MB
-                        memory_info = proc.memory_info()
-                        memory_values.append(memory_info.rss / 1024 / 1024)
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                    pass
-            if memory_values:
-                return sum(memory_values) / len(memory_values)
-        except Exception as e:
-            logger.error(f"Error getting memory usage for {process_name}: {e}")
-        return 0
 
     def _check_matlab_status_via_command(self):
         """通过命令行执行Matlab命令检查状态"""

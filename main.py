@@ -17,28 +17,40 @@ def start_flask_server():
         # 模拟进程配置数据
         process_configs = [
             {
-                "process_name": "chrome.exe",
+                "process_name": "msedge.exe",
                 "cpu_threshold": 5.0,
-                "memory_threshold": 1000.0,
+                "memory_threshold": 1500.0,
                 "io_threshold": 10.0,
                 "network_threshold": 1.0,
-                "idle_duration": 1800
+                "idle_duration": 1800,
+                "termination_mode": "auto",
+                "idle_detection_mode": "cumulative"
             },
             {
-                "process_name": "notepad.exe",
-                "cpu_threshold": 1.0,
-                "memory_threshold": 50.0,
-                "io_threshold": 1.0,
-                "network_threshold": 0.1,
-                "idle_duration": 1800
-            },
-            {
-                "process_name": "explorer.exe",
-                "cpu_threshold": 10.0,
+                "process_name": "bilibili.exe",
+                "cpu_threshold": 3.0,
                 "memory_threshold": 500.0,
-                "io_threshold": 20.0,
-                "network_threshold": 2.0,
-                "idle_duration": 1800
+                "io_threshold": 5.0,
+                "network_threshold": 0.5,
+                "idle_duration": 1800,
+                "termination_mode": "confirm",
+                "idle_detection_mode": "sliding_window",
+                "sliding_window_size": 180,
+                "sliding_window_idle_percentage": 90,
+                "sliding_window_weighted": False
+            },
+            {
+                "process_name": "EXCEL.EXE",
+                "cpu_threshold": 2.0,
+                "memory_threshold": 800.0,
+                "io_threshold": 8.0,
+                "network_threshold": 0.1,
+                "idle_duration": 120,
+                "termination_mode": "confirm",
+                "idle_detection_mode": "sliding_window",
+                "sliding_window_size": 12,
+                "sliding_window_idle_percentage": 90,
+                "sliding_window_weighted": False
             },
             {
                 "process_name": "MATLAB.exe",
@@ -46,7 +58,12 @@ def start_flask_server():
                 "memory_threshold": 1000.0,
                 "io_threshold": 10.0,
                 "network_threshold": 1.0,
-                "idle_duration": 1800
+                "idle_duration": 1800,
+                "termination_mode": "confirm",
+                "idle_detection_mode": "sliding_window",
+                "sliding_window_size": 180,
+                "sliding_window_idle_percentage": 85,
+                "sliding_window_weighted": True
             }
         ]
         

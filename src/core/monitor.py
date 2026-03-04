@@ -2,6 +2,7 @@ import psutil
 import time
 import win32gui
 import win32process
+import ctypes
 from src.core.model import ProcessStatus
 from src.utils.logger import logger
 from src.config.user_config import user_config
@@ -14,6 +15,8 @@ class ProcessMonitor:
         self.last_foreground_check_time = 0
         self.foreground_check_interval = 1  # 前台窗口检查间隔，单位秒
         self.foreground_pid = None
+        self.last_confirmation_time = {}  # 记录每个进程的上次弹窗时间，避免频繁弹窗
+        self.confirmation_cooldown = 60  # 弹窗冷却时间，单位秒
 
     def get_processes_by_name(self, process_name):
         """根据进程名称获取所有进程，使用缓存提高性能"""
@@ -46,6 +49,59 @@ class ProcessMonitor:
         except Exception as e:
             logger.error(f"Error checking if process is in foreground: {e}")
         return False
+
+    def show_termination_confirmation(self, process_name):
+        """显示终止进程确认对话框"""
+        try:
+            # 检查冷却时间，避免频繁弹窗
+            current_time = time.time()
+            if process_name in self.last_confirmation_time:
+                if current_time - self.last_confirmation_time[process_name] < self.confirmation_cooldown:
+                    logger.info(f"Skipping confirmation for {process_name} due to cooldown")
+                    return False
+            
+            # 导入必要的Windows API常量
+            MB_YESNO = 4
+            MB_SYSTEMMODAL = 4096
+            MB_SETFOREGROUND = 65536
+            MB_TOPMOST = 0x40000
+            IDYES = 6  # 是按钮的ID
+            IDNO = 7   # 否按钮的ID
+            IDTIMEOUT = 32000  # 超时返回值
+            
+            # 定义MessageBoxTimeout函数
+            user32 = ctypes.WinDLL('user32', use_last_error=True)
+            MessageBoxTimeout = user32.MessageBoxTimeoutW
+            MessageBoxTimeout.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
+            MessageBoxTimeout.restype = ctypes.c_int
+            
+            # 显示带超时的消息框
+            result = MessageBoxTimeout(
+                0,  # 父窗口句柄
+                f"进程 {process_name} 已闲置超过阈值，是否终止？\n\n" +
+                f"如果您不操作，将在10秒后自动取消。",  # 消息内容
+                "进程闲置提醒",  # 标题
+                MB_YESNO | MB_SYSTEMMODAL | MB_SETFOREGROUND | MB_TOPMOST,  # 样式
+                0,  # 图标（0表示无图标）
+                10000  # 超时时间（毫秒）
+            )
+            
+            # 更新上次弹窗时间
+            self.last_confirmation_time[process_name] = current_time
+            
+            # 检查结果
+            if result == IDYES:
+                logger.info(f"User confirmed termination of {process_name}")
+                return True
+            elif result == IDTIMEOUT:
+                logger.info(f"Confirmation dialog timed out for {process_name}")
+                return False
+            else:
+                logger.info(f"User cancelled termination of {process_name}")
+                return False
+        except Exception as e:
+            logger.error(f"Error showing confirmation dialog: {e}")
+            return False
 
     def get_process_group_status(self, process_name, config):
         """获取进程组的聚合状态"""
