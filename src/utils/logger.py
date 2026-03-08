@@ -24,7 +24,7 @@ class Logger:
         self.log_level = log_level
         # 从用户配置获取日志保留天数
         self.keep_days = keep_days if keep_days is not None else user_config.get("log_keep_days", 7)
-        self.logger = None
+        self._logger = None
         self.setup_logger()
         self.cleanup_old_logs()
 
@@ -35,8 +35,8 @@ class Logger:
         today = datetime.datetime.now().strftime("%Y-%m-%d")
         log_file = os.path.join(self.log_dir, f"app_{today}.log")
 
-        self.logger = logging.getLogger("IdleProcessMonitor")
-        self.logger.setLevel(self.log_level)
+        self._logger = logging.getLogger("IdleProcessMonitor")
+        self._logger.setLevel(self.log_level)
 
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -46,9 +46,9 @@ class Logger:
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(formatter)
 
-        if not self.logger.handlers:
-            self.logger.addHandler(file_handler)
-            self.logger.addHandler(console_handler)
+        if not self._logger.handlers:
+            self._logger.addHandler(file_handler)
+            self._logger.addHandler(console_handler)
 
     def cleanup_old_logs(self):
         if not os.path.exists(self.log_dir):
@@ -66,24 +66,24 @@ class Logger:
                     print(f"Error cleaning up old log file {filename}: {e}")
 
     def debug(self, message):
-        if self.logger:
-            self.logger.debug(message)
+        if self._logger:
+            self._logger.debug(message)
 
     def info(self, message):
-        if self.logger:
-            self.logger.info(message)
+        if self._logger:
+            self._logger.info(message)
 
     def warning(self, message):
-        if self.logger:
-            self.logger.warning(message)
+        if self._logger:
+            self._logger.warning(message)
 
     def error(self, message):
-        if self.logger:
-            self.logger.error(message)
+        if self._logger:
+            self._logger.error(message)
 
     def critical(self, message):
-        if self.logger:
-            self.logger.critical(message)
+        if self._logger:
+            self._logger.critical(message)
 
 # 全局日志实例
 logger = Logger()

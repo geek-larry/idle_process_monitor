@@ -17,6 +17,10 @@ class ProcessMonitor:
         self.foreground_pid = None
         self.last_confirmation_time = {}  # 记录每个进程的上次弹窗时间，避免频繁弹窗
         self.confirmation_cooldown = 60  # 弹窗冷却时间，单位秒
+        self.last_io_check_time = 0  # 上次IO检查时间
+        self.io_check_interval = 2  # IO检查间隔，单位秒
+        self.last_io_counters = None  # 上次IO计数器值
+        self.last_net_counters = None  # 上次网络计数器值
 
     def get_processes_by_name(self, process_name):
         """根据进程名称获取所有进程，使用缓存提高性能"""
@@ -30,7 +34,7 @@ class ProcessMonitor:
                     if name not in self.process_cache:
                         self.process_cache[name] = []
                     self.process_cache[name].append(proc)
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
             self.last_cache_time = current_time
         
@@ -39,7 +43,6 @@ class ProcessMonitor:
     def is_process_in_foreground(self, process_id):
         """判断进程是否在前台窗口"""
         try:
-            # 直接获取前台窗口，不使用时间戳检查频率
             # 获取当前前台窗口句柄
             foreground_window = win32gui.GetForegroundWindow()
             if foreground_window:
@@ -66,20 +69,18 @@ class ProcessMonitor:
             MB_SETFOREGROUND = 65536
             MB_TOPMOST = 0x40000
             IDYES = 6  # 是按钮的ID
-            IDNO = 7   # 否按钮的ID
             IDTIMEOUT = 32000  # 超时返回值
             
             # 定义MessageBoxTimeout函数
             user32 = ctypes.WinDLL('user32', use_last_error=True)
-            MessageBoxTimeout = user32.MessageBoxTimeoutW
-            MessageBoxTimeout.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
-            MessageBoxTimeout.restype = ctypes.c_int
+            message_box_timeout = user32.MessageBoxTimeoutW
+            message_box_timeout.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
+            message_box_timeout.restype = ctypes.c_int
             
             # 显示带超时的消息框
-            result = MessageBoxTimeout(
+            result = message_box_timeout(
                 0,  # 父窗口句柄
-                f"进程 {process_name} 已闲置超过阈值，是否终止？\n\n" +
-                f"如果您不操作，将在10秒后自动取消。",  # 消息内容
+                "进程 {} 已闲置超过阈值，是否终止？\n\n如果您不操作，将在10秒后自动取消。".format(process_name),  # 消息内容
                 "进程闲置提醒",  # 标题
                 MB_YESNO | MB_SYSTEMMODAL | MB_SETFOREGROUND | MB_TOPMOST,  # 样式
                 0,  # 图标（0表示无图标）
@@ -113,32 +114,59 @@ class ProcessMonitor:
         total_cpu = 0
         total_memory = 0
         is_foreground = False
-
-        # 获取IO计数器初始值
-        io_counters = psutil.disk_io_counters()
-        net_io_counters = psutil.net_io_counters()
-
-        # 等待一小段时间以获取IO和网络使用情况
-        psutil.time.sleep(0.05)  # 减少等待时间，提高性能
-
-        # 获取IO计数器新值
-        new_io_counters = psutil.disk_io_counters()
-        new_net_io_counters = psutil.net_io_counters()
-
-        # 计算IO和网络使用情况
-        io_read_speed = (new_io_counters.read_bytes - io_counters.read_bytes) / 1024 / 1024 / 0.05  # MB/s
-        io_write_speed = (new_io_counters.write_bytes - io_counters.write_bytes) / 1024 / 1024 / 0.05  # MB/s
-        net_sent_speed = (new_net_io_counters.bytes_sent - net_io_counters.bytes_sent) / 1024 / 1024 / 0.05  # MB/s
-        net_recv_speed = (new_net_io_counters.bytes_recv - net_io_counters.bytes_recv) / 1024 / 1024 / 0.05  # MB/s
+        total_io = 0
+        total_network = 0
 
         # 限制同时获取CPU使用率的进程数量，避免资源消耗过大
         max_processes = user_config.get("max_processes_per_check", 10)
         processes_to_check = processes[:max_processes]
         
+        # 计算IO和网络使用情况（使用缓存，减少频繁检查）
+        current_time = psutil.time.time()
+        if current_time - self.last_io_check_time > self.io_check_interval:
+            # 获取IO计数器初始值
+            io_counters = psutil.disk_io_counters()
+            net_io_counters = psutil.net_io_counters()
+
+            # 等待一小段时间以获取IO和网络使用情况
+            psutil.time.sleep(0.01)  # 进一步减少等待时间
+
+            # 获取IO计数器新值
+            new_io_counters = psutil.disk_io_counters()
+            new_net_io_counters = psutil.net_io_counters()
+
+            # 计算IO和网络使用情况
+            io_read_speed = (new_io_counters.read_bytes - io_counters.read_bytes) / 1024 / 1024 / 0.01  # MB/s
+            io_write_speed = (new_io_counters.write_bytes - io_counters.write_bytes) / 1024 / 1024 / 0.01  # MB/s
+            net_sent_speed = (new_net_io_counters.bytes_sent - net_io_counters.bytes_sent) / 1024 / 1024 / 0.01  # MB/s
+            net_recv_speed = (new_net_io_counters.bytes_recv - net_io_counters.bytes_recv) / 1024 / 1024 / 0.01  # MB/s
+
+            total_io = io_read_speed + io_write_speed
+            total_network = net_sent_speed + net_recv_speed
+
+            # 更新缓存
+            self.last_io_check_time = current_time
+            self.last_io_counters = (io_counters, new_io_counters)
+            self.last_net_counters = (net_io_counters, new_net_io_counters)
+        else:
+            # 使用缓存的IO和网络数据
+            if self.last_io_counters and self.last_net_counters:
+                io_counters, new_io_counters = self.last_io_counters
+                net_io_counters, new_net_counters = self.last_net_counters
+                
+                # 计算IO和网络使用情况
+                io_read_speed = (new_io_counters.read_bytes - io_counters.read_bytes) / 1024 / 1024 / 0.01  # MB/s
+                io_write_speed = (new_io_counters.write_bytes - io_counters.write_bytes) / 1024 / 1024 / 0.01  # MB/s
+                net_sent_speed = (new_net_counters.bytes_sent - net_io_counters.bytes_sent) / 1024 / 1024 / 0.01  # MB/s
+                net_recv_speed = (new_net_counters.bytes_recv - net_io_counters.bytes_recv) / 1024 / 1024 / 0.01  # MB/s
+
+                total_io = io_read_speed + io_write_speed
+                total_network = net_sent_speed + net_recv_speed
+
         for proc in processes_to_check:
             try:
-                # 获取CPU使用率
-                cpu_percent = proc.cpu_percent(interval=0.05)  # 减少间隔，提高性能
+                # 获取CPU使用率（使用interval=0，避免阻塞）
+                cpu_percent = proc.cpu_percent(interval=0)  # 使用interval=0，基于上次调用的结果
                 total_cpu += cpu_percent
 
                 # 获取内存使用情况
@@ -149,26 +177,18 @@ class ProcessMonitor:
                 if not is_foreground and self.is_process_in_foreground(proc.pid):
                     is_foreground = True
 
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
 
         # 计算平均或总使用率
         avg_cpu = total_cpu / len(processes_to_check) if processes_to_check else 0
-        total_io = io_read_speed + io_write_speed
-        total_network = net_sent_speed + net_recv_speed
 
         # 判断是否活跃
-        is_active = False
-        if is_foreground:
-            is_active = True
-        elif avg_cpu > config.cpu_threshold:
-            is_active = True
-        elif total_memory > config.memory_threshold:
-            is_active = True
-        elif total_io > config.io_threshold:
-            is_active = True
-        elif total_network > config.network_threshold:
-            is_active = True
+        is_active = is_foreground or \
+                    avg_cpu > config.cpu_threshold or \
+                    total_memory > config.memory_threshold or \
+                    total_io > config.io_threshold or \
+                    total_network > config.network_threshold
 
         return ProcessStatus(
             process_name=process_name,

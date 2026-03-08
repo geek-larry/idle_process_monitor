@@ -1,18 +1,36 @@
 class ProcessConfig:
-    def __init__(self, process_name, cpu_threshold, memory_threshold, io_threshold, network_threshold, idle_duration, termination_mode="auto", idle_detection_mode="cumulative", sliding_window_size=180, sliding_window_idle_percentage=90, sliding_window_weighted=False):
+    def __init__(self, process_name, cpu_threshold, memory_threshold, io_threshold, network_threshold, idle_duration, 
+                 termination_mode="auto", idle_detection_mode="cumulative", 
+                 sliding_window_size=180, sliding_window_idle_percentage=90, sliding_window_weighted=False):
+        """初始化进程配置
+        
+        Args:
+            process_name: 进程名称
+            cpu_threshold: CPU使用率阈值
+            memory_threshold: 内存使用阈值
+            io_threshold: IO使用阈值
+            network_threshold: 网络使用阈值
+            idle_duration: 闲置时长阈值
+            termination_mode: 终止模式 (auto: 自动终止, confirm: 确认后终止)
+            idle_detection_mode: 闲置检测模式 (cumulative: 累积计时, sliding_window: 滑动窗口)
+            sliding_window_size: 滑动窗口大小
+            sliding_window_idle_percentage: 闲置百分比阈值
+            sliding_window_weighted: 是否使用加权滑动窗口
+        """
         self.process_name = process_name
         self.cpu_threshold = cpu_threshold
         self.memory_threshold = memory_threshold
         self.io_threshold = io_threshold
         self.network_threshold = network_threshold
         self.idle_duration = idle_duration
-        self.termination_mode = termination_mode  # auto: 自动终止, confirm: 确认后终止
-        self.idle_detection_mode = idle_detection_mode  # cumulative: 累积计时, sliding_window: 滑动窗口
-        self.sliding_window_size = sliding_window_size  # 滑动窗口大小
-        self.sliding_window_idle_percentage = sliding_window_idle_percentage  # 闲置百分比阈值
-        self.sliding_window_weighted = sliding_window_weighted  # 是否使用加权滑动窗口
+        self.termination_mode = termination_mode
+        self.idle_detection_mode = idle_detection_mode
+        self.sliding_window_size = sliding_window_size
+        self.sliding_window_idle_percentage = sliding_window_idle_percentage
+        self.sliding_window_weighted = sliding_window_weighted
 
     def to_dict(self):
+        """转换为字典"""
         return {
             "process_name": self.process_name,
             "cpu_threshold": self.cpu_threshold,
@@ -29,6 +47,7 @@ class ProcessConfig:
 
     @classmethod
     def from_dict(cls, data):
+        """从字典创建实例"""
         return cls(
             process_name=data.get("process_name"),
             cpu_threshold=data.get("cpu_threshold"),

@@ -49,15 +49,31 @@ class ConfigManager:
         try:
             response = requests.get(API_URL, timeout=5)
             if response.status_code == 200:
-                config_data = response.json()
-                configs = [ProcessConfig.from_dict(data) for data in config_data]
-                self._save_configs_to_file(configs)
-                return configs
+                try:
+                    config_data = response.json()
+                    configs = [ProcessConfig.from_dict(data) for data in config_data]
+                    self._save_configs_to_file(configs)
+                    return configs
+                except json.JSONDecodeError as e:
+                    logger.error(f"Error parsing API response: {e}")
+                    return []
+                except ValueError as e:
+                    logger.error(f"Error creating ProcessConfig from API data: {e}")
+                    return []
             else:
                 logger.error(f"Failed to get configs from API: {response.status_code}")
                 return []
+        except requests.exceptions.Timeout as e:
+            logger.error(f"API request timed out: {e}")
+            return []
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"API connection error: {e}")
+            return []
+        except requests.exceptions.RequestException as e:
+            logger.error(f"API request error: {e}")
+            return []
         except Exception as e:
-            logger.error(f"Error getting configs from API: {e}")
+            logger.error(f"Unexpected error getting configs from API: {e}")
             return []
 
     def _save_configs_to_file(self, configs):
@@ -66,20 +82,32 @@ class ConfigManager:
             config_data = [config.to_dict() for config in configs]
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(config_data, f, indent=2)
+        except IOError as e:
+            logger.error(f"IO error saving configs to file: {e}")
         except Exception as e:
-            logger.error(f"Error saving configs to file: {e}")
+            logger.error(f"Unexpected error saving configs to file: {e}")
 
     def _get_configs_from_file(self):
         """从文件获取配置"""
         try:
             if os.path.exists(CONFIG_FILE):
-                with open(CONFIG_FILE, 'r') as f:
-                    config_data = json.load(f)
-                    return [ProcessConfig.from_dict(data) for data in config_data]
+                try:
+                    with open(CONFIG_FILE, 'r') as f:
+                        config_data = json.load(f)
+                        return [ProcessConfig.from_dict(data) for data in config_data]
+                except json.JSONDecodeError as e:
+                    logger.error(f"Error parsing config file: {e}")
+                    return []
+                except ValueError as e:
+                    logger.error(f"Error creating ProcessConfig from file data: {e}")
+                    return []
             else:
                 return []
+        except IOError as e:
+            logger.error(f"IO error reading config file: {e}")
+            return []
         except Exception as e:
-            logger.error(f"Error getting configs from file: {e}")
+            logger.error(f"Unexpected error getting configs from file: {e}")
             return []
 
     def get_process_config(self, process_name):
