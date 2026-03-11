@@ -1,6 +1,8 @@
 import time
 import threading
 from collections import deque
+import getpass
+import socket
 from src.config.config import config_manager
 from src.core.monitor import monitor
 from src.utils.logger import logger
@@ -16,8 +18,6 @@ class ProcessScheduler:
         self.running = False
         self.thread = None
         self.check_interval = user_config.get("check_interval", 10)  # 检查间隔，单位秒
-        self.idle_detection_mode = user_config.get("idle.detection.mode", "cumulative")  # 空闲判定模式
-        self.sliding_window_size = user_config.get("sliding.window.size", 180)  # 滑动窗口采样点数
 
     def start(self):
         """启动定时器
@@ -253,8 +253,39 @@ class ProcessScheduler:
             # 输出滑动窗口状态
             logger.debug(f"Process {process_name} sliding window: {idle_percentage:.1f}% idle ({'weighted' if use_weighted else 'normal'})")
     
+    def _get_host_info(self):
+        """获取主机信息"""
+        try:
+            # 获取登录账户
+            username = getpass.getuser()
+            
+            # 获取主机名
+            hostname = socket.gethostname()
+            
+            # 获取IP地址
+            ip_address = socket.gethostbyname(hostname)
+            
+            return {
+                "username": username,
+                "hostname": hostname,
+                "ip_address": ip_address
+            }
+        except Exception as e:
+            logger.error(f"Error getting host info: {e}")
+            return {
+                "username": "Unknown",
+                "hostname": "Unknown",
+                "ip_address": "Unknown"
+            }
+    
     def _handle_idle_process(self, process_name, config, window_size, use_weighted, idle_percentage):
         """处理闲置进程"""
+        # 获取主机信息
+        host_info = self._get_host_info()
+        
+        # 打印主机信息
+        logger.info(f"Host info: Username={host_info['username']}, Hostname={host_info['hostname']}, IP={host_info['ip_address']}")
+        
         logger.info(f"Process {process_name} has been {idle_percentage:.1f}% idle for {window_size * self.check_interval} seconds ({'weighted ' if use_weighted else ''}sliding window), terminating...")
         # 处理进程终止
         self._handle_process_termination(process_name, config)
@@ -294,6 +325,12 @@ class ProcessScheduler:
             
             # 检查是否超过闲置时间阈值
             if self.idle_times[process_name] >= config.idle_duration:
+                # 获取主机信息
+                host_info = self._get_host_info()
+                
+                # 打印主机信息
+                logger.info(f"Host info: Username={host_info['username']}, Hostname={host_info['hostname']}, IP={host_info['ip_address']}")
+                
                 logger.info(f"Process {process_name} has been idle for {self.idle_times[process_name]} seconds (cumulative), terminating...")
                 # 处理进程终止
                 self._handle_process_termination(process_name, config)

@@ -14,8 +14,8 @@ class UserConfig:
             "check_interval": lambda: config_loader.get_int("check.interval", default or 10),
             "log_level": lambda: config_loader.get("log.level", default or "INFO"),
             "log_keep_days": lambda: config_loader.get_int("log.keep.days", default or 7),
-            "max_processes_per_check": lambda: config_loader.get_int("max.processes.per.check", default or 10),
-            "process_cache_expiry": lambda: config_loader.get_int("process.cache.expiry", default or 5),
+
+
             "debug.enabled": lambda: config_loader.get_boolean("debug.enabled", default or False),
         }
         return config_map.get(key, lambda: default)()

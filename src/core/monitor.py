@@ -10,7 +10,6 @@ from src.config.user_config import user_config
 class ProcessMonitor:
     def __init__(self):
         self.process_cache = {}
-        self.cache_expiry = user_config.get("process_cache_expiry", 5)  # 进程信息缓存时间，单位秒
         self.last_cache_time = 0
         self.last_foreground_check_time = 0
         self.foreground_check_interval = 1  # 前台窗口检查间隔，单位秒
@@ -23,22 +22,16 @@ class ProcessMonitor:
         self.last_net_counters = None  # 上次网络计数器值
 
     def get_processes_by_name(self, process_name):
-        """根据进程名称获取所有进程，使用缓存提高性能"""
-        current_time = psutil.time.time()
-        if current_time - self.last_cache_time > self.cache_expiry:
-            # 缓存过期，重新获取
-            self.process_cache = {}
-            for proc in psutil.process_iter(['pid', 'name']):
-                try:
-                    name = proc.info['name']
-                    if name not in self.process_cache:
-                        self.process_cache[name] = []
-                    self.process_cache[name].append(proc)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            self.last_cache_time = current_time
-        
-        return self.process_cache.get(process_name, [])
+        """根据进程名称获取所有进程"""
+        # 每次都重新获取进程信息
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                if proc.info['name'] == process_name:
+                    processes.append(proc)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        return processes
 
     def is_process_in_foreground(self, process_id):
         """判断进程是否在前台窗口"""
@@ -117,9 +110,7 @@ class ProcessMonitor:
         total_io = 0
         total_network = 0
 
-        # 限制同时获取CPU使用率的进程数量，避免资源消耗过大
-        max_processes = user_config.get("max_processes_per_check", 10)
-        processes_to_check = processes[:max_processes]
+
         
         # 计算IO和网络使用情况（使用缓存，减少频繁检查）
         current_time = psutil.time.time()
@@ -163,7 +154,7 @@ class ProcessMonitor:
                 total_io = io_read_speed + io_write_speed
                 total_network = net_sent_speed + net_recv_speed
 
-        for proc in processes_to_check:
+        for proc in processes:
             try:
                 # 获取CPU使用率（使用interval=0，避免阻塞）
                 cpu_percent = proc.cpu_percent(interval=0)  # 使用interval=0，基于上次调用的结果
@@ -181,7 +172,7 @@ class ProcessMonitor:
                 pass
 
         # 计算平均或总使用率
-        avg_cpu = total_cpu / len(processes_to_check) if processes_to_check else 0
+        avg_cpu = total_cpu / len(processes) if processes else 0
 
         # 判断是否活跃
         is_active = is_foreground or \
